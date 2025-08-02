@@ -1,0 +1,162 @@
+---
+title: "DataManagement"
+output:
+  pdf_document: default
+  html_document: default
+date: "2025-06-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+# Load library
+library(dplyr)
+library(readr)
+library(lubridate)
+```
+
+## Cleaning
+
+There are some values that were retrieve missing, unnecessarily data was delete. However, age at injury that was missing was inserted manual.
+
+```{r}
+# Load
+df <- read_csv("DataFinal.csv")
+
+# Delete columns
+df$player_url <- NULL
+df$club_missed_games_for <- NULL
+
+# Change column name
+colnames(df)[colnames(df) == "season_injured"] <- "season"
+
+# Convert 'duration' to integer 
+df$duration <- as.integer(gsub(" days| day", "", df$duration))
+
+# Player more than one
+df <- df[df$player_name %in% names(player_counts[player_counts > 1]), ]
+
+
+# Injuries (These were deleted because it could impact the results in the models, while we do not have enough information about how Covid impact in player) 
+df <- df[df$injury != "Corona virus", ]
+df <- df[df$injury != "Quarantine", ]
+
+# Save 
+write.csv(df, "DataFinal.csv", row.names = FALSE)
+```
+
+
+
+## Categorization 
+
+```{r}
+# Lowercase
+df$injury_lower <- tolower(df$injury)
+
+# Map
+map_injury_group <- function(injury) {
+  if (injury %in% c("knock", "dead leg")) return("Contusion")
+  else if (injury == "minor knock") return("Minor Knock")
+  else if (injury == "ill") return("Illness")
+  else if (injury == "thigh problems") return("Thigh Injury")
+  else if (injury == "back problems") return("Back Injury")
+  else if (injury == "torn muscle fiber") return("Muscle Tear")
+  else if (injury == "calf problems") return("Calf Injury")
+  else if (grepl("hamstring", injury)) return("Hamstring Injury")
+  else if (grepl("adductor|groin", injury)) return("Groin/Adductor Injury")
+  else if (grepl("muscle tear", injury)) return("Muscle Tear")
+  else if (grepl("muscle injury|muscular", injury)) return("Muscle Injury")
+  else if (grepl("strain", injury)) return("Muscle Strain")
+  else if (grepl("achilles", injury)) return("Achilles Injury")
+  else if (grepl("ligament tear", injury)) return("Ligament Tear")
+  else if (grepl("ligament injury", injury)) return("Ligament Injury")
+  else if (grepl("acl", injury)) return("Knee - ACL Injury")
+  else if (grepl("mcl", injury)) return("Knee - MCL Injury")
+  else if (grepl("meniscus", injury)) return("Knee - Meniscus Injury")
+  else if (grepl("ankle ligament", injury)) return("Ankle - Ligament Injury")
+  else if (grepl("ankle sprain", injury)) return("Ankle - Sprain")
+  else if (grepl("ankle injury|ankle problem", injury)) return("Ankle - General")
+  else if (grepl("ankle surgery", injury)) return("Ankle - Surgery")
+  else if (grepl("bruise on ankle", injury)) return("Ankle - Bruise")
+  else if (grepl("knee", injury)) return("Knee - General")
+  else if (grepl("fracture|broken", injury)) return("Bone Fracture")
+  else if (grepl("dislocation", injury)) return("Joint Dislocation")
+  else if (grepl("contusion|bruise", injury)) return("Contusion")
+  else if (grepl("surgery", injury)) return("Post-Surgery Recovery")
+  else if (grepl("virus|infection|influenza|flu", injury)) return("Illness")
+  else if (grepl("concussion", injury)) return("Concussion")
+  else if (grepl("head", injury)) return("Head Injury")
+  else if (grepl("unknown", injury)) return("Unknown")
+  else if (grepl("fatigue", injury)) return("Fatigue")
+  else if (grepl("injury", injury)) return("General Injury")
+  else return("Other")
+}
+
+# Apply 
+df$category <- sapply(df$injury_lower, map_injury_group)
+
+# Remove helper column
+df$injury_lower <- NULL
+
+# Save result
+write.csv(df, "DataFinalGrouped.csv", row.names = FALSE)
+
+# View all category types and their frequencies
+injury_table <- df %>%
+ filter(!is.na(category)) %>%
+ count(category, sort = TRUE) %>%
+ print(n = Inf) 
+```
+
+## Target Value 
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+df$category <- trimws(df$category)
+
+# Count occurrences of each category per player
+df <- df %>%
+ group_by(player_name, category) %>%
+ mutate(recur_same_injury = n() > 1) %>%
+ ungroup()
+
+# View summary
+table(df$recur_same_injury)
+write.csv(df, "DataFinal.csv", row.names = FALSE)
+```
+
+
+#Target Valeu 
+
+```{r}
+library(dplyr)
+library(lubridate)
+ 
+df$category <- trimws(df$category)
+
+df <- df %>%
+ arrange(player_name, category, injured_since)
+
+# Calculate days until same injury recurrence
+df <- df %>%
+ group_by(player_name, category) %>%
+ mutate(
+   next_injury_date = as.Date(lead(injured_since)),
+   days_until_recurrence = as.integer(next_injury_date - as.Date(injured_since))
+ ) %>%
+ ungroup() %>%
+ select(-next_injury_date)
+
+# Check 
+summary(df$days_until_recurrence)
+write.csv(df, "DataFinal.csv", row.names = FALSE)
+```
+
+
+
+
+

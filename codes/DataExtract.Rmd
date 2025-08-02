@@ -1,0 +1,261 @@
+---
+title: "DataExtract"
+output: html_document
+date: "2025-06-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r message=FALSE, warning=FALSE}
+# Load library
+library(worldfootballR)
+library(dplyr)
+library(lubridate)
+library(rvest)
+library(xml2)
+library(readr)
+```
+
+
+## One Player Test 
+
+```{r}
+# TEST
+url <- "https://www.transfermarkt.com/neymar/profil/spieler/68290"
+
+# Get data
+bio <- tm_player_bio(url)
+injuries <- tm_player_injury_history(url)
+# Convert birth date to Date
+birth_date <- as.Date(bio$date_of_birth[1])
+
+# Calculate age at injury using 'injured_since'
+if (!is.null(injuries) && "injured_since" %in% names(injuries)) {
+  injuries$age_at_injury <- round(as.numeric(difftime(injuries$injured_since, birth_date, units = "days")) / 365.25, 2)
+}
+# Calculate integer age at injury
+injuries$age_at_injury <- as.integer(as.numeric(difftime(injuries$injured_since, birth_date, units = "days")) / 365.25)
+
+
+# Add extra info (no birth date)
+injuries$player_name <- bio$player_name[1]
+injuries$position <- bio$position[1]
+
+# Save result
+write.csv(injuries, "neymar_injury.csv", row.names = FALSE)
+View(injuries)
+```
+
+
+
+## Get player URLs from the League 
+
+```{r}
+# Team URLs
+team_urls <- tm_league_team_urls(
+  country_name = "England",
+  start_year = 2024,
+  league_url = "https://www.transfermarkt.com/premier-league/startseite/wettbewerb/GB1"
+)
+
+# Extract player URLs
+player_urls <- c()
+
+for (team in team_urls) {
+  urls <- tryCatch(tm_team_player_urls(team), error = function(e) NULL)
+  if (!is.null(urls)) {
+    player_urls <- c(player_urls, urls)
+  }
+}
+
+# Remove duplicates
+player_urls <- unique(player_urls)
+
+# See how many players 
+cat("Total player URLs collected:", length(player_urls), "\n")
+```
+
+
+
+## Process Players 
+
+```{r}
+# Necessary Test
+injuries_df <- data.frame()
+batch_size <- 20
+total_players <- length(player_urls)
+error_log <- c()
+
+# Loop for safe extract players 
+
+## Safer to do in batch. Some player will show error message however
+## Running the code again can make the extract the same player work.
+
+for (start in seq(1, total_players, by = batch_size)) {
+  end <- min(start + batch_size - 1, total_players)
+  cat("\nProcessing batch:", start, "to", end, "\n")
+  batch <- player_urls[start:end]
+
+  for (url in batch) {
+    cat("Player:", url, "\n")
+    #Safe
+    tryCatch({
+      # Get data
+      bio <- tm_player_bio(url)
+      injuries <- tm_player_injury_history(url)
+      
+      # Safe condition check
+      if (is.data.frame(bio) &&
+          is.data.frame(injuries) &&
+          "injured_since" %in% names(injuries) &&
+          !is.null(bio$date_of_birth[1]) && !is.na(bio$date_of_birth[1]) &&
+          !is.null(bio$player_name[1]) && !is.na(bio$player_name[1]) &&
+          !is.null(bio$position[1]) && !is.na(bio$position[1]) &&
+          nrow(injuries) > 0) {
+        # Warning
+        birth_date <- suppressWarnings(as.Date(bio$date_of_birth[1]))
+        injuries$injured_since <- suppressWarnings(as.Date(injuries$injured_since))
+
+        # Calculate age
+        injuries$age_at_injury <- mapply(function(inj_date) {
+          if (!is.na(inj_date) && !is.na(birth_date)) {
+            as.integer(as.numeric(difftime(inj_date, birth_date, units = "days")) / 365.25)
+          } else {
+            NA_integer_
+          }
+        }, injuries$injured_since)
+
+        injuries$player_name <- rep(bio$player_name[1], nrow(injuries))
+        injuries$position <- rep(bio$position[1], nrow(injuries))
+        injuries_df <- bind_rows(injuries_df, injuries)
+      } else {
+        # Error Message
+        error_log <- c(error_log, paste("Skipped due to incomplete data:", url))
+      }
+    }, error = function(e) {
+      cat("Error with", url, ":", e$message, "\n")
+      error_log <- c(error_log, paste("Error with", url, ":", e$message))
+    })
+  }
+
+  # Save after each batch
+  closeAllConnections()
+  output_file <- paste0("injuries_batch_up_to_", end, ".csv")
+  write.csv(injuries_df, output_file, row.names = FALSE)
+  cat("Saved batch up to player", end, "\n")
+}
+
+# Save error log
+writeLines(as.character(unlist(error_log)), "error_log.txt")
+```
+
+
+ ## Delete Search 
+ 
+```{r}
+# Load the CSV =
+existing_data <- read_csv("injuries_batch_up_to_.csv")
+
+# Extract URLs 
+existing_urls <- unique(existing_data$player_url)
+
+# Remove URLs that are already exist
+filtered_player_urls <- setdiff(player_urls, existing_urls)
+
+# Safe Check
+cat("New unique player URLs to process:", length(filtered_player_urls), "\n")
+player_urls <- filtered_player_urls
+```
+
+
+## Manual Search 
+
+```{r}
+# This if you want to search multiples players.
+
+# List of player URLs
+player_urls <- c(
+  "https://www.transfermarkt.com/william-saliba/profil/spieler/495666",
+  "https://www.transfermarkt.com/bukayo-saka/profil/spieler/433177",
+  "https://www.transfermarkt.com/thomas-partey/profil/spieler/230784",
+  "https://www.transfermarkt.com/ilkay-gundogan/profil/spieler/53622",
+  "https://www.transfermarkt.com/neto/profil/spieler/111819",
+  "https://www.transfermarkt.com/kieran-tierney/profil/spieler/300716"
+)
+
+# Empty list
+all_injuries <- list()
+
+# Loop through each player
+for (url in player_urls) {
+  # Safe to see who is extracting
+  cat("Processing:", url, "\n")
+  
+  tryCatch({
+    bio <- tm_player_bio(url)
+    injuries <- tm_player_injury_history(url)
+
+    if (!is.null(injuries) && nrow(injuries) > 0) {
+      birth_date <- as.Date(bio$date_of_birth[1])
+      injuries$age_at_injury <- as.integer(as.numeric(difftime(injuries$injured_since, birth_date, units = "days")) / 365.25)
+      injuries$player_name <- bio$player_name[1]
+      injuries$position <- bio$position[1]
+      all_injuries[[length(all_injuries) + 1]] <- injuries
+    }
+    
+    # Error
+  }, error = function(e) {
+    cat("Failed:", url, "\n")
+  })
+}
+
+# Combine all
+combined_df <- do.call(rbind, all_injuries)
+main_file <- "mainData.csv"
+existing <- read.csv(main_file)
+combined_df <- bind_rows(existing, combined_df)
+write.csv(combined_df, main_file, row.names = FALSE)
+cat("Saved to", main_file, "\n")
+```
+
+
+## Combine Datas 
+
+```{r}
+# Read both CSV files
+data1 <- read_csv("Data1.csv", show_col_types = FALSE)
+data2 <- read_csv("Data2.csv", show_col_types = FALSE)
+
+# Combine the data
+combined <- bind_rows(data1, data2)
+
+# Save to new CSV
+write_csv(combined, "DataFinal.csv")
+
+cat("CSV saved")
+```
+
+
+
+## Check how many players and how many injuries each 
+
+```{r}
+# Read data if necessary
+data <- read.csv("PremierLeague.csv", stringsAsFactors = FALSE)
+unique_players <- length(unique(data$player_name))
+cat("Total unique players:", unique_players, "\n")
+
+# Times
+injury_counts <- table(data$player_name)
+injury_counts_df <- as.data.frame(injury_counts)
+colnames(injury_counts_df) <- c("player_name", "injury_count")
+View(injury_counts_df)
+```
+
+
+
+
+
