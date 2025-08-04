@@ -1,1 +1,14 @@
+Data1 - Distribution of Days Until Injury Recurrence  
+Data2 - Days Until Recurrence by Injury Category (Top 15)  
+Data3 - Top Injury Categories by Recurrence Rate  
+Data4 - Average Days Until Recurrence by Age Group  
+Data5 - Games Missed vs. Days Until Recurrence  
+Data6 - Injury Categories with Longest Avarage Recurrence Time
+
+Regression1 - Predicted vs. Actual Recurrence Days  
+Regression2 - Boxplot of Prediction Errors   
+Regression3 - Residual Plots for Regression Models
+
+Classification1 - ROC Curves for Classification Models
+Classification2 - Confusion Matrices for Classification Models  
 
