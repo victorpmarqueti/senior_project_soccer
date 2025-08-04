@@ -2,3 +2,7 @@
 Injury recurrence is a persistent issue in professional sports, affecting athlete performance, long-term health, and overall team success. This project explored patterns of injury recurrence among professional soccer players and examined how machine learning models can help in predicting injury outcomes. Using a dataset of player injury histories, the project approached two predictive tasks: estimating the number of days until the recurrence of the same injury (regression) and predicting whether an injury would recur (classification). Several models were tested, with Ridge Regression and Gradient Boosting as top performers. Gradient Boosting showed the strongest performance across both tasks, with high predictive accuracy and recall, while Ridge Regression was particularly effective in estimating recurrence timing. These findings indicate that machine learning can offer valuable insights into injury patterns and recurrence risks. In future work, access to larger and more comprehensive datasets could further enhance model performance and support improved player health and team management strategies in professional soccer.
 
 Keywords: injury recurrence; machine learning; regression; classification; soccer analytics
+
+
+
+Last updated: August 3,2025.
