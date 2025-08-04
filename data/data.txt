@@ -1,2 +1,4 @@
 The data used in this project was extracted in March 2025, reflecting the most recent and available records at the time of analysis. The leagues does not include all players in team squads (and their past injuries) due to limitation. 
 This data includes: 424 Players and 3946 injuries.
+
+Last updated: August 3,2025.
